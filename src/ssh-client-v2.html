@@ -2,10 +2,11 @@
     RED.nodes.registerType('ssh-client-v2', {
         category: 'input',
         defaults: {
-            debug: {value:false},
-            ssh: { value: "" },
-            hostname: { value: "" },
             name: { value: "" },
+            debug: {value:false},
+            privateKey: { value: "" },
+            port: {value : "22"},
+            hostname: { value: "" },
         },
         credentials: {
             username: { type: "text" },
@@ -22,21 +23,26 @@
 
 <script type="text/x-red" data-template-name="ssh-client-v2">
     <div class="form-row">
-        <label for="node-input-debug"><i class="fa fa-server"></i> Debug</label>
-        <input type="checkbox" id="node-input-debug" placeholder="">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
     </div>
     <div class="form-row">
-        <label for="node-input-ssh"><i class="fa fa-podcast"></i> Ssh</label>
-        <input type="text" id="node-input-ssh" placeholder="/home/user/.ssh/id_rsa">
+        <label for="node-input-debug"><i class="fa fa-server"></i> Debug</label>
+        <input type="checkbox" id="node-input-debug" placeholder="" style="display:inline-block; width:auto; vertical-align:top;">
+    </div>
+    <div class="form-row">
+        <label for="node-input-privateKey"><i class="fa fa-podcast"></i> Private Key</label>
+        <input type="text" id="node-input-privateKey" placeholder="/home/user/.ssh/id_rsa">
     </div>
     <div class="form-row">
         <label for="node-input-hostname"><i class="fa fa-podcast"></i> Hostname</label>
         <input type="text" id="node-input-hostname" placeholder="127.0.0.1">
     </div>
-    <div class="form-row">
-        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name">
+        <div class="form-row">
+        <label for="node-input-port"><i class="fa fa-podcast"></i> Port</label>
+        <input type="text" id="node-input-port" placeholder="22">
     </div>
+
     <div class="form-row">
         <label for="node-input-username"><i class="fa fa-user-circle-o"></i> Username</label>
         <input type="text" id="node-input-username" placeholder="Username">
@@ -48,5 +54,14 @@
 </script>
 
 <script type="text/x-red" data-help-name="ssh-client-v2">
-    <p>A simple node that handle ssh client</p>
+    <h3>Inputs</h3>
+    <p><code>msg.payload</code> can be either a string, in which case it's interpreted as the command to execute, or a JSON object, which <i>must</i> have the <code>command</code> field set and <i>may</i> have any or all options set.</p>
+
+    <h3>Outputs</h3>
+    <p>Output: <code>msg.payload</code> is a JSON object containing three fields: <code>exitCode</code>, <code>stdout</code>, and <code>stderr</code>.</p>
+
+    <h3>More Information</h3>
+    <p>You can take a look at <a href="https://github.com/olivervbk/node-red-contrib-ssh-v2/blob/master/README.md">the README</a> for more information.</p>
+
+
 </script>
