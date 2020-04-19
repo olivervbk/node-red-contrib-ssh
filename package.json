@@ -1,6 +1,6 @@
 {
     "name": "node-red-contrib-ssh-v2-reconnection",
-    "version": "0.0.2",
+    "version": "1.0.0",
     "description": "A Node-RED node for running remote ssh commands and supports reconnection attempts. Based on https://github.com/yroffin/node-red-contrib-ssh",
     "repository": {
         "type": "git",

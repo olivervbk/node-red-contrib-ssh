@@ -2,116 +2,133 @@
 
 module.exports = function (RED) {
 
-    var options = null;
-    var node = null;
-    var client = null;
-    var isConnected = false;
+    let options = null;
+    let node = null;
+    let client = null;
+
+    function setOptions(msg, config) {
+        let keyPath = config.privateKey ? config.privateKey : msg.privateKey;
+
+        options = {
+            host: config.hostname ? config.hostname : msg.hostname,
+            port: config.port ? config.port: msg.port,
+            username: node.credentials.username ? node.credentials.username : msg.username,
+            password: node.credentials.password ? node.credentials.password : msg.password,
+            privateKey: keyPath ? require('fs').readFileSync(keyPath) : undefined
+        };
+    }
 
     function _connectClient(callback){
-        if(isConnected) {
-            callback(client);
-            return;
-        }
-
         let SshClient = require('ssh2').Client;
+        let hasError = false;
 
         // Ssh client handler
         client = new SshClient();
         client.on('ready', () => {
-            isConnected = true;
-            node.log("Ssh client ready");
-            node.status({ fill: "green", shape: "dot", text: 'Connected' });
+            node.debug("Ssh client ready");
             callback(client);
         });
 
         client.on('close', (err) => {
-            isConnected = false;
-            node.status({ fill: "red", shape: "dot", text: 'Disconnected' });
-            node.error('Ssh client was closed.', err);
+            if (err) {
+                node.log('Ssh client was closed by error: ', err);
+                node.status({ fill: "red", shape: "dot", text: 'Disconnected' });
+            } else {
+                node.debug('Ssh client was closed.', err);
+                // FIXME: when the error callback below is called, this close callback
+                //        doesn't have an error. This seems weird, but I don't know if
+                //        it actually means we're doing something wrong.
+                hasError || node.status({});
+            }
         });
 
+        // FIXME: when bad options are supplied (wrong hostname, port, etc) this
+        //        callback is triggered, but `err` is undefined. Is that a problem
+        //        with the `ssh2` library, or are we doing something wrong?
         client.on('error', (err) => {
-            node.error('Ssh client error', err);
+            hasError = true;
+            node.error('Ssh client error ', err);
+            node.status({ fill: "red", shape: "dot", text: 'Error' });
         });
 
-        //node.log("SSH Key:"+config.ssh);
         client.connect(options);
     }
 
     function NodeRedSsh(config) {
         RED.nodes.createNode(this, config);
         node = this;
-
-        node.status({ fill: "blue", shape: "dot", text: "Initializing" });
+        node.config = config
 
         // Handle node close
         node.on('close', function () {
-            node.warn('Ssh client dispose');
+            node.debug('Ssh client dispose');
             client && client.close();
             client && client.dispose();
         });
 
-        options = {
-            host: config.hostname,
-            port: 22,
-            username: node.credentials.username ? node.credentials.username : undefined,
-            password: node.credentials.password ? node.credentials.password : undefined,
-            privateKey: config.ssh ? require('fs').readFileSync(config.ssh) : undefined
+        // Returns the object that the node outputs as its payload.
+        // stdout/stderr are arrays, because if you run multiple commands,
+        // e.g. `echo 'line one'; echo 'line two'`, each one will trigger
+        // the callback that call `notify()`.
+        let session = () => {
+            return {
+                exitCode: 0,
+                stdout: [],
+                stderr: [],
+            }
         };
 
-        // Session handler
-        var session = {
-            code: 0,
-            stdout: [],
-            stderr: []
-        };
+        let msg = session()
 
-        var notify = (type, data) => {
+        let notify = (type, data) => {
             switch (type) {
+                // Connection closed.
                 case 0:
-                    session.code = data;
-                    node.send(session);
-                    session = {
-                        code: 0,
-                        stdout: [],
-                        stderr: []
-                    };
+                    msg.exitCode = data;
+                    node.send({payload: msg});
+                    msg = session()
                     break;
+                // stdout
                 case 1:
-                    session.stdout.push(data.toString());
+                    msg.stdout.push(data.toString());
                     break;
+                // stderr
                 case 2:
-                    session.stderr.push(data.toString());
+                    msg.stderr.push(data.toString());
                     break;
             }
         };
 
         node.on('input', (msg) => {
-            if (!msg.payload) {
-                node.warn("Invalid msg.payload.");
-                return;
+               // If the message is a string, then we assume it's just the command.
+            // Otherwise, we assume it's an object with a `command` attribute.
+            if (typeof msg.payload === "string") {
+                msg.payload = {command: msg.payload};
             }
+
+            setOptions(msg.payload, node.config);
+
             node.debug("Getting client connection...");
             _connectClient((conn) => {
-                conn.exec(msg.payload, (err, stream) => {
-                    node.log("Ssh client error in input.");
-                    if (err) throw err;
+                conn.exec(msg.payload.command, (err, stream) => {
+                    if (err) {
+                        node.status({ fill: "red", shape: "dot", text: "Connection error" });
+                        node.error(err);
+                        throw err;
+                    }
                     stream.on('close', function (code, signal) {
-                        node.warn('Stream :: close :: code: ' + code + ', signal: ' + signal);
+                        node.debug('Stream :: close :: code: ' + code + ', signal: ' + signal);
                         conn.end();
                         notify(0, code);
                     }).on('data', (data) => {
-                        //node.status({ fill: "green", shape: "dot", text: data.toString() });
                         notify(1, data);
                     }).stderr.on('data', (data) => {
-                        //node.status({ fill: "black", shape: "dot", text: data.toString() });
+                        node.status({ fill: "red", shape: "dot", text: data.toString() });
                         notify(2, data);
                     });
                 });
             });
         });
-
-        _connectClient((conn) => { node.debug("SSH-CLI initial connection succeeded."); });
 
         node.debug("SSH-CLI setup done.");
     }
